@@ -35,6 +35,49 @@ function readSkillFileSync(params: {
   }
 }
 
+function stripFrontmatterBlock(raw: string): string {
+  const normalized = raw.replaceAll("\r\n", "\n");
+  if (!normalized.startsWith("---\n")) {
+    return normalized;
+  }
+  const closingIndex = normalized.indexOf("\n---\n", 4);
+  if (closingIndex === -1) {
+    return normalized;
+  }
+  return normalized.slice(closingIndex + 5);
+}
+
+function extractDescriptionFallback(raw: string, fallbackName: string): string | undefined {
+  const body = stripFrontmatterBlock(raw);
+  const lines = body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (const line of lines) {
+    const heading = line.match(/^#{1,6}\s+(.+)$/)?.[1]?.trim() ?? line;
+    if (!heading) {
+      continue;
+    }
+    if (heading === fallbackName) {
+      continue;
+    }
+    const match = heading.match(/^(.+?)\s+[—–-]\s+(.+)$/);
+    if (!match) {
+      return heading;
+    }
+    const maybeName = match[1]?.trim();
+    const description = match[2]?.trim();
+    if (!maybeName || !description) {
+      continue;
+    }
+    if (maybeName === fallbackName) {
+      return description;
+    }
+    return heading;
+  }
+  return undefined;
+}
+
 function loadSingleSkillDirectory(params: {
   skillDir: string;
   source: string;
@@ -60,7 +103,8 @@ function loadSingleSkillDirectory(params: {
 
   const fallbackName = path.basename(params.skillDir).trim();
   const name = frontmatter.name?.trim() || fallbackName;
-  const description = frontmatter.description?.trim();
+  const description =
+    frontmatter.description?.trim() ?? extractDescriptionFallback(raw, fallbackName);
   if (!name || !description) {
     return null;
   }
